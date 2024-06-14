@@ -66,7 +66,6 @@
 #include "vmx.h"
 #include "x86.h"
 
-
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
 
@@ -2590,9 +2589,6 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 		evmcs_sanitize_exec_ctrls(vmcs_conf);
 #endif
 
-	printk(KERN_ERR "CHUQI: setup_vmcs_config CPU_BASED_INVLPG_EXITING=%d\n",
-	 	(vmcs_conf->cpu_based_exec_ctrl & (CPU_BASED_INVLPG_EXITING)) ? 1 : 0);
-
 	return 0;
 }
 
@@ -4399,7 +4395,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 	/* 22.2.1, 20.8.1 */
 	vm_entry_controls_set(vmx, vmx_vmentry_ctrl());
 
-	vmx->vcpu.arch.cr0_guest_owned_bits = vmx_l1_guest_owned_cr0_bits();
+	vmx->vcpu.arch.cr0_guest_owned_bits = KVM_POSSIBLE_CR0_GUEST_BITS;
 	vmcs_writel(CR0_GUEST_HOST_MASK, ~vmx->vcpu.arch.cr0_guest_owned_bits);
 
 	set_cr4_guest_host_mask(vmx);
@@ -5050,7 +5046,7 @@ static int handle_cr(struct kvm_vcpu *vcpu)
 		break;
 	case 3: /* lmsw */
 		val = (exit_qualification >> LMSW_SOURCE_DATA_SHIFT) & 0x0f;
-		trace_kvm_cr_write(0, (kvm_read_cr0_bits(vcpu, ~0xful) | val));
+		trace_kvm_cr_write(0, (kvm_read_cr0(vcpu) & ~0xful) | val);
 		kvm_lmsw(vcpu, val);
 
 		return kvm_skip_emulated_instruction(vcpu);
@@ -7004,7 +7000,7 @@ static u64 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 		goto exit;
 	}
 
-	if (kvm_read_cr0_bits(vcpu, X86_CR0_CD)) {
+	if (kvm_read_cr0(vcpu) & X86_CR0_CD) {
 		ipat = VMX_EPT_IPAT_BIT;
 		if (kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_CD_NW_CLEARED))
 			cache = MTRR_TYPE_WRBACK;
@@ -7990,14 +7986,6 @@ static int __init vmx_init(void)
 		enlightened_vmcs = false;
 	}
 #endif
-
-
-	// Chuqi: print invlpg & cr0
-	printk(KERN_ERR "CHUQI: CPU_BASED_INVLPG_EXITING=%d\n",
-	 	(vmcs_config.cpu_based_exec_ctrl & (CPU_BASED_INVLPG_EXITING)) ? 1 : 0);
-
-	printk(KERN_ERR "CHUQI: GUEST_OWNED_CR0=%d.\n",
-		(vmx_l1_guest_owned_cr0_bits() & X86_CR0_WP) ? 1 : 0);
 
 	r = kvm_init(&vmx_init_ops, sizeof(struct vcpu_vmx),
 		     __alignof__(struct vcpu_vmx), THIS_MODULE);

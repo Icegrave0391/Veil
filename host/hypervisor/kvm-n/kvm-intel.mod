@@ -1,0 +1,2 @@
+/data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/vmx.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/vmenter.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/pmu_intel.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/vmcs12.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/evmcs.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/nested.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/posted_intr.o /data/volume1/chuqi/GitHub/Veil/host/hypervisor/kvm/vmx/sgx.o
+

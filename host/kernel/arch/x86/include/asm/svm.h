@@ -529,7 +529,7 @@ struct vmcb {
 
 #define SVM_EXITINFO_REG_MASK 0x0F
 
-#define SVM_CR0_SELECTIVE_MASK (X86_CR0_TS | X86_CR0_MP)
+#define SVM_CR0_SELECTIVE_MASK (X86_CR0_TS | X86_CR0_MP | X86_CR0_WP)
 
 /* GHCB Accessor functions */
 

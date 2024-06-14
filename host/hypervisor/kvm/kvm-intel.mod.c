@@ -353,4 +353,4 @@ MODULE_INFO(depends, "kvm");
 
 MODULE_ALIAS("cpu:type:x86,ven*fam*mod*:feature:*0085*");
 
-MODULE_INFO(srcversion, "FC56E049791377891E140E0");
+MODULE_INFO(srcversion, "E7FD842E99B9CB774A5E93E");

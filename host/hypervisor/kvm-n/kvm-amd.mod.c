@@ -382,4 +382,4 @@ MODULE_INFO(depends, "kvm,ccp");
 
 MODULE_ALIAS("cpu:type:x86,ven*fam*mod*:feature:*00C2*");
 
-MODULE_INFO(srcversion, "1ACB7C77B994D47C0E4D8AB");
+MODULE_INFO(srcversion, "7F1E486C924C062963681B6");

@@ -1155,13 +1155,13 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb_control_area *control = &svm->vmcb->control;
 	struct vmcb_save_area *save = &svm->vmcb->save;
+
 	svm_set_intercept(svm, INTERCEPT_CR0_READ);
 	svm_set_intercept(svm, INTERCEPT_CR3_READ);
 	svm_set_intercept(svm, INTERCEPT_CR4_READ);
 	svm_set_intercept(svm, INTERCEPT_CR0_WRITE);
 	svm_set_intercept(svm, INTERCEPT_CR3_WRITE);
 	svm_set_intercept(svm, INTERCEPT_CR4_WRITE);
-
 	if (!kvm_vcpu_apicv_active(vcpu))
 		svm_set_intercept(svm, INTERCEPT_CR8_WRITE);
 
@@ -1209,10 +1209,10 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	svm_set_intercept(svm, INTERCEPT_RDPRU);
 	svm_set_intercept(svm, INTERCEPT_RSM);
 
-#if 1
+#if (1)
 	svm_clr_intercept(svm, INTERCEPT_CR0_READ);
 	svm_clr_intercept(svm, INTERCEPT_CR0_WRITE);
-	// svm_clr_intercept(svm, INTERCEPT_SELECTIVE_CR0);
+	svm_clr_intercept(svm, INTERCEPT_SELECTIVE_CR0);
 #endif
 
 	if (!kvm_mwait_in_guest(vcpu->kvm)) {
@@ -1308,7 +1308,7 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	enable_gif(svm);
 
 	// Print interceptions
-#if 0
+#if (1)
 	printk("[CHUQI] init_vmcb. INTERCEPT_CR3 read=%d write=%d\n",
 			 svm_is_intercept(svm, INTERCEPT_CR3_READ),  svm_is_intercept(svm, INTERCEPT_CR3_WRITE));
 	printk("[CHUQI] init_vmcb. INTERCEPT_INVLPG=%d\n",
@@ -1804,13 +1804,8 @@ void svm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 		svm_clr_intercept(svm, INTERCEPT_CR0_READ);
 		svm_clr_intercept(svm, INTERCEPT_CR0_WRITE);
 	} else {
-#if (0)
 		svm_set_intercept(svm, INTERCEPT_CR0_READ);
 		svm_set_intercept(svm, INTERCEPT_CR0_WRITE);
-#else
-		svm_clr_intercept(svm, INTERCEPT_CR0_READ);
-		svm_clr_intercept(svm, INTERCEPT_CR0_WRITE);
-#endif
 	}
 }
 
@@ -2525,8 +2520,6 @@ static int cr_interception(struct kvm_vcpu *vcpu)
 	if (unlikely((svm->vmcb->control.exit_info_1 & CR_VALID) == 0))
 		return emulate_on_interception(vcpu);
 
-	printk("CHUQI: cr_interception  exit code: 0x%x\n", svm->vmcb->control.exit_code);
-
 	reg = svm->vmcb->control.exit_info_1 & SVM_EXITINFO_REG_MASK;
 	if (svm->vmcb->control.exit_code == SVM_EXIT_CR0_SEL_WRITE)
 		cr = SVM_EXIT_WRITE_CR0 - SVM_EXIT_READ_CR0;
@@ -3174,344 +3167,6 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_AVIC_UNACCELERATED_ACCESS]	= avic_unaccelerated_access_interception,
 	[SVM_EXIT_VMGEXIT]			= sev_handle_vmgexit,
 };
-
-void veil_dump_vmcb(struct kvm_vcpu *vcpu)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-	struct vmcb_control_area *control = &svm->vmcb->control;
-	struct vmcb_save_area *save = &svm->vmcb->save;
-	struct vmcb_save_area *save01 = &svm->vmcb01.ptr->save;
-
-	pr_err("VMCB %p, last attempted VMRUN on CPU %d\n",
-	       svm->current_vmcb->ptr, vcpu->arch.last_vmentry_cpu);
-	pr_err("VMCB Control Area:\n");
-	pr_err("%-20s%04x\n", "cr_read:", control->intercepts[INTERCEPT_CR] & 0xffff);
-	pr_err("%-20s%04x\n", "cr_write:", control->intercepts[INTERCEPT_CR] >> 16);
-	pr_err("%-20s%04x\n", "dr_read:", control->intercepts[INTERCEPT_DR] & 0xffff);
-	pr_err("%-20s%04x\n", "dr_write:", control->intercepts[INTERCEPT_DR] >> 16);
-	pr_err("%-20s%08x\n", "exceptions:", control->intercepts[INTERCEPT_EXCEPTION]);
-	pr_err("%-20s%08x %08x\n", "intercepts:",
-              control->intercepts[INTERCEPT_WORD3],
-	       control->intercepts[INTERCEPT_WORD4]);
-	pr_err("%-20s%d\n", "pause filter count:", control->pause_filter_count);
-	pr_err("%-20s%d\n", "pause filter threshold:",
-	       control->pause_filter_thresh);
-	pr_err("%-20s%016llx\n", "iopm_base_pa:", control->iopm_base_pa);
-	pr_err("%-20s%016llx\n", "msrpm_base_pa:", control->msrpm_base_pa);
-	pr_err("%-20s%016llx\n", "tsc_offset:", control->tsc_offset);
-	pr_err("%-20s%d\n", "asid:", control->asid);
-	pr_err("%-20s%d\n", "tlb_ctl:", control->tlb_ctl);
-	pr_err("%-20s%08x\n", "int_ctl:", control->int_ctl);
-	pr_err("%-20s%08x\n", "int_vector:", control->int_vector);
-	pr_err("%-20s%08x\n", "int_state:", control->int_state);
-	pr_err("%-20s%08x\n", "exit_code:", control->exit_code);
-	pr_err("%-20s%016llx\n", "exit_info1:", control->exit_info_1);
-	pr_err("%-20s%016llx\n", "exit_info2:", control->exit_info_2);
-	pr_err("%-20s%08x\n", "exit_int_info:", control->exit_int_info);
-	pr_err("%-20s%08x\n", "exit_int_info_err:", control->exit_int_info_err);
-	pr_err("%-20s%lld\n", "nested_ctl:", control->nested_ctl);
-	pr_err("%-20s%016llx\n", "nested_cr3:", control->nested_cr3);
-	pr_err("%-20s%016llx\n", "avic_vapic_bar:", control->avic_vapic_bar);
-	pr_err("%-20s%016llx\n", "ghcb:", control->ghcb_gpa);
-	pr_err("%-20s%08x\n", "event_inj:", control->event_inj);
-	pr_err("%-20s%08x\n", "event_inj_err:", control->event_inj_err);
-	pr_err("%-20s%lld\n", "virt_ext:", control->virt_ext);
-	pr_err("%-20s%016llx\n", "next_rip:", control->next_rip);
-	pr_err("%-20s%016llx\n", "avic_backing_page:", control->avic_backing_page);
-	pr_err("%-20s%016llx\n", "avic_logical_id:", control->avic_logical_id);
-	pr_err("%-20s%016llx\n", "avic_physical_id:", control->avic_physical_id);
-	pr_err("%-20s%016llx\n", "vmsa_pa:", control->vmsa_pa);
-
-	if (vcpu->arch.guest_state_protected && sev_snp_guest(vcpu->kvm)) {
-		struct kvm_sev_info *sev = &to_kvm_svm(vcpu->kvm)->sev_info;
-		struct page *save_page;
-		int ret, error;
-
-		save_page = alloc_page(GFP_KERNEL);
-		if (!save_page)
-			return;
-
-		save = page_address(save_page);
-		save01 = save;
-
-		wbinvd_on_all_cpus();
-
-		ret = snp_guest_dbg_decrypt_page(__pa(sev->snp_context) >> PAGE_SHIFT,
-						 svm->vmcb->control.vmsa_pa >> PAGE_SHIFT,
-						 __pa(save) >> PAGE_SHIFT,
-						 &error);
-		if (ret) {
-			pr_err("%s: failed to decrypt vmsa %d\n", __func__, error);
-			return;
-		}
-	}
-
-	pr_err("VMCB State Save Area:\n");
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "es:",
-	       save->es.selector, save->es.attrib,
-	       save->es.limit, save->es.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "cs:",
-	       save->cs.selector, save->cs.attrib,
-	       save->cs.limit, save->cs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ss:",
-	       save->ss.selector, save->ss.attrib,
-	       save->ss.limit, save->ss.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ds:",
-	       save->ds.selector, save->ds.attrib,
-	       save->ds.limit, save->ds.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "fs:",
-	       save01->fs.selector, save01->fs.attrib,
-	       save01->fs.limit, save01->fs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "gs:",
-	       save01->gs.selector, save01->gs.attrib,
-	       save01->gs.limit, save01->gs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "gdtr:",
-	       save->gdtr.selector, save->gdtr.attrib,
-	       save->gdtr.limit, save->gdtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ldtr:",
-	       save01->ldtr.selector, save01->ldtr.attrib,
-	       save01->ldtr.limit, save01->ldtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "idtr:",
-	       save->idtr.selector, save->idtr.attrib,
-	       save->idtr.limit, save->idtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "tr:",
-	       save01->tr.selector, save01->tr.attrib,
-	       save01->tr.limit, save01->tr.base);
-	pr_err("vmpl: %d   cpl:  %d               efer:          %016llx\n",
-	       save->vmpl, save->cpl, save->efer);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cr0:", save->cr0, "cr2:", save->cr2);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cr3:", save->cr3, "cr4:", save->cr4);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "dr6:", save->dr6, "dr7:", save->dr7);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "rip:", save->rip, "rflags:", save->rflags);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "rsp:", save->rsp, "rax:", save->rax);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "star:", save01->star, "lstar:", save01->lstar);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cstar:", save01->cstar, "sfmask:", save01->sfmask);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "kernel_gs_base:", save01->kernel_gs_base,
-	       "sysenter_cs:", save01->sysenter_cs);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "sysenter_esp:", save01->sysenter_esp,
-	       "sysenter_eip:", save01->sysenter_eip);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "gpat:", save->g_pat, "dbgctl:", save->dbgctl);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "br_from:", save->br_from, "br_to:", save->br_to);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "excp_from:", save->last_excp_from,
-	       "excp_to:", save->last_excp_to);
-
-	if (sev_snp_guest(vcpu->kvm)) {
-		struct sev_es_save_area *vmsa = (struct sev_es_save_area *)save;
-
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rax:", vmsa->rax, "rbx:", vmsa->rbx);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rcx:", vmsa->rcx, "rdx:", vmsa->rdx);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rsi:", vmsa->rsi, "rdi:", vmsa->rdi);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rbp:", vmsa->rbp, "rsp:", vmsa->rsp);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r8:", vmsa->r8, "r9:", vmsa->r9);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r10:", vmsa->r10, "r11:", vmsa->r11);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r12:", vmsa->r12, "r13:", vmsa->r13);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r14:", vmsa->r14, "r15:", vmsa->r15);
-
-		wbinvd_on_all_cpus();
-		__free_page(virt_to_page(save));
-	}
-
-}
-
-void veil_dump_vmcb_custom_vmsa(struct kvm_vcpu *vcpu)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-	struct vmcb_control_area *control = &svm->vmcb->control;
-	struct vmcb_save_area *save = &svm->vmcb->save;
-	struct vmcb_save_area *save01 = &svm->vmcb01.ptr->save;
-
-	pr_err("VMCB %p, last attempted VMRUN on CPU %d\n",
-	       svm->current_vmcb->ptr, vcpu->arch.last_vmentry_cpu);
-	pr_err("VMCB Control Area:\n");
-	pr_err("%-20s%04x\n", "cr_read:", control->intercepts[INTERCEPT_CR] & 0xffff);
-	pr_err("%-20s%04x\n", "cr_write:", control->intercepts[INTERCEPT_CR] >> 16);
-	pr_err("%-20s%04x\n", "dr_read:", control->intercepts[INTERCEPT_DR] & 0xffff);
-	pr_err("%-20s%04x\n", "dr_write:", control->intercepts[INTERCEPT_DR] >> 16);
-	pr_err("%-20s%08x\n", "exceptions:", control->intercepts[INTERCEPT_EXCEPTION]);
-	pr_err("%-20s%08x %08x\n", "intercepts:",
-              control->intercepts[INTERCEPT_WORD3],
-	       control->intercepts[INTERCEPT_WORD4]);
-	pr_err("%-20s%d\n", "pause filter count:", control->pause_filter_count);
-	pr_err("%-20s%d\n", "pause filter threshold:",
-	       control->pause_filter_thresh);
-	pr_err("%-20s%016llx\n", "iopm_base_pa:", control->iopm_base_pa);
-	pr_err("%-20s%016llx\n", "msrpm_base_pa:", control->msrpm_base_pa);
-	pr_err("%-20s%016llx\n", "tsc_offset:", control->tsc_offset);
-	pr_err("%-20s%d\n", "asid:", control->asid);
-	pr_err("%-20s%d\n", "tlb_ctl:", control->tlb_ctl);
-	pr_err("%-20s%08x\n", "int_ctl:", control->int_ctl);
-	pr_err("%-20s%08x\n", "int_vector:", control->int_vector);
-	pr_err("%-20s%08x\n", "int_state:", control->int_state);
-	pr_err("%-20s%08x\n", "exit_code:", control->exit_code);
-	pr_err("%-20s%016llx\n", "exit_info1:", control->exit_info_1);
-	pr_err("%-20s%016llx\n", "exit_info2:", control->exit_info_2);
-	pr_err("%-20s%08x\n", "exit_int_info:", control->exit_int_info);
-	pr_err("%-20s%08x\n", "exit_int_info_err:", control->exit_int_info_err);
-	pr_err("%-20s%lld\n", "nested_ctl:", control->nested_ctl);
-	pr_err("%-20s%016llx\n", "nested_cr3:", control->nested_cr3);
-	pr_err("%-20s%016llx\n", "avic_vapic_bar:", control->avic_vapic_bar);
-	pr_err("%-20s%016llx\n", "ghcb:", control->ghcb_gpa);
-	pr_err("%-20s%08x\n", "event_inj:", control->event_inj);
-	pr_err("%-20s%08x\n", "event_inj_err:", control->event_inj_err);
-	pr_err("%-20s%lld\n", "virt_ext:", control->virt_ext);
-	pr_err("%-20s%016llx\n", "next_rip:", control->next_rip);
-	pr_err("%-20s%016llx\n", "avic_backing_page:", control->avic_backing_page);
-	pr_err("%-20s%016llx\n", "avic_logical_id:", control->avic_logical_id);
-	pr_err("%-20s%016llx\n", "avic_physical_id:", control->avic_physical_id);
-	pr_err("%-20s%016llx\n", "vmsa_pa:", control->vmsa_pa);
-
-	if (vcpu->arch.guest_state_protected && sev_snp_guest(vcpu->kvm)) {
-		struct kvm_sev_info *sev = &to_kvm_svm(vcpu->kvm)->sev_info;
-		struct page *save_page;
-		int ret, error;
-
-		save_page = alloc_page(GFP_KERNEL);
-		if (!save_page)
-			return;
-
-		save = page_address(save_page);
-		save01 = save;
-
-		wbinvd_on_all_cpus();
-
-		ret = snp_guest_dbg_decrypt_page(__pa(sev->snp_context) >> PAGE_SHIFT,
-						 //svm->vmcb->control.vmsa_pa >> PAGE_SHIFT,
-						 svm->vmsa_pa[2] >> PAGE_SHIFT,
-						 
-						 __pa(save) >> PAGE_SHIFT,
-						 &error);
-		if (ret) {
-			pr_err("%s: failed to decrypt vmsa %d\n", __func__, error);
-			return;
-		}
-	}
-
-	pr_err("VMCB State Save Area:\n");
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "es:",
-	       save->es.selector, save->es.attrib,
-	       save->es.limit, save->es.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "cs:",
-	       save->cs.selector, save->cs.attrib,
-	       save->cs.limit, save->cs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ss:",
-	       save->ss.selector, save->ss.attrib,
-	       save->ss.limit, save->ss.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ds:",
-	       save->ds.selector, save->ds.attrib,
-	       save->ds.limit, save->ds.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "fs:",
-	       save01->fs.selector, save01->fs.attrib,
-	       save01->fs.limit, save01->fs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "gs:",
-	       save01->gs.selector, save01->gs.attrib,
-	       save01->gs.limit, save01->gs.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "gdtr:",
-	       save->gdtr.selector, save->gdtr.attrib,
-	       save->gdtr.limit, save->gdtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "ldtr:",
-	       save01->ldtr.selector, save01->ldtr.attrib,
-	       save01->ldtr.limit, save01->ldtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "idtr:",
-	       save->idtr.selector, save->idtr.attrib,
-	       save->idtr.limit, save->idtr.base);
-	pr_err("%-5s s: %04x a: %04x l: %08x b: %016llx\n",
-	       "tr:",
-	       save01->tr.selector, save01->tr.attrib,
-	       save01->tr.limit, save01->tr.base);
-	pr_err("vmpl: %d   cpl:  %d               efer:          %016llx\n",
-	       save->vmpl, save->cpl, save->efer);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cr0:", save->cr0, "cr2:", save->cr2);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cr3:", save->cr3, "cr4:", save->cr4);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "dr6:", save->dr6, "dr7:", save->dr7);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "rip:", save->rip, "rflags:", save->rflags);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "rsp:", save->rsp, "rax:", save->rax);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "star:", save01->star, "lstar:", save01->lstar);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "cstar:", save01->cstar, "sfmask:", save01->sfmask);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "kernel_gs_base:", save01->kernel_gs_base,
-	       "sysenter_cs:", save01->sysenter_cs);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "sysenter_esp:", save01->sysenter_esp,
-	       "sysenter_eip:", save01->sysenter_eip);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "gpat:", save->g_pat, "dbgctl:", save->dbgctl);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "br_from:", save->br_from, "br_to:", save->br_to);
-	pr_err("%-15s %016llx %-13s %016llx\n",
-	       "excp_from:", save->last_excp_from,
-	       "excp_to:", save->last_excp_to);
-
-	if (sev_snp_guest(vcpu->kvm)) {
-		struct sev_es_save_area *vmsa = (struct sev_es_save_area *)save;
-
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rax:", vmsa->rax, "rbx:", vmsa->rbx);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rcx:", vmsa->rcx, "rdx:", vmsa->rdx);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rsi:", vmsa->rsi, "rdi:", vmsa->rdi);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "rbp:", vmsa->rbp, "rsp:", vmsa->rsp);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r8:", vmsa->r8, "r9:", vmsa->r9);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r10:", vmsa->r10, "r11:", vmsa->r11);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r12:", vmsa->r12, "r13:", vmsa->r13);
-		pr_err("%-15s %016llx %-13s %016llx\n",
-		       "r14:", vmsa->r14, "r15:", vmsa->r15);
-
-		wbinvd_on_all_cpus();
-		__free_page(virt_to_page(save));
-	}
-
-}
 
 void dump_vmcb(struct kvm_vcpu *vcpu)
 {

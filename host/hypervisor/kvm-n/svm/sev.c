@@ -34,15 +34,6 @@
 #include "trace.h"
 #include "mmu.h"
 
-// HARSH
-#define SVM_VMGEXIT_DUMP_VMCB			0x80000019
-#define SVM_VMGEXIT_RUN_ENCLAVE			0x80000020
-
-// VIKRAM
-#define SVM_VMGEXIT_HELLO_WORLD			0x80000021
-#define SVM_VMGEXIT_INIT_SCATTACK		0x80000022
-#define SVM_VMGEXIT_FINI_SCATTACK		0x80000023
-
 #ifndef CONFIG_KVM_AMD_SEV
 /*
  * When this config is not defined, SEV feature is not supported and APIs in
@@ -1825,12 +1816,9 @@ static int snp_launch_update(struct kvm *kvm, struct kvm_sev_cmd *argp)
 		data.address = __sme_page_pa(inpages[i]);
 		data.page_size = X86_TO_RMP_PG_LEVEL(level);
 		data.page_type = params.page_type;
-		// data.vmpl3_perms = params.vmpl3_perms;
-		data.vmpl3_perms = params.vmpl1_perms;
-		//data.vmpl2_perms = params.vmpl2_perms;
-		data.vmpl2_perms = params.vmpl1_perms;
+		data.vmpl3_perms = params.vmpl3_perms;
+		data.vmpl2_perms = params.vmpl2_perms;
 		data.vmpl1_perms = params.vmpl1_perms;
-
 		ret = __sev_issue_cmd(argp->sev_fd, SEV_CMD_SNP_LAUNCH_UPDATE, &data, error);
 		if (ret) {
 			/*
@@ -2370,7 +2358,7 @@ void sev_vm_destroy(struct kvm *kvm)
 		for (i = 0; i < kvm->created_vcpus; i++) {
 			struct kvm_vcpu *vcpu = kvm->vcpus[i];
 
-			veil_dump_vmcb(vcpu);
+			dump_vmcb(vcpu);
 		}
 	}
 
@@ -2763,14 +2751,13 @@ static void sev_es_sync_from_ghcb(struct vcpu_svm *svm, struct ghcb *ghcb)
 	memset(ghcb->save.valid_bitmap, 0, sizeof(ghcb->save.valid_bitmap));
 }
 
-// Adil: This is where each VMGEXIT will come for validation
 static int sev_es_validate_vmgexit(struct vcpu_svm *svm, u64 *exit_code)
 {
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 	struct kvm_host_map map;
 	struct ghcb *ghcb;
 	int token;
-	
+
 	if (svm_map_ghcb(svm, &map, &token))
 		return -EFAULT;
 
@@ -2874,16 +2861,6 @@ static int sev_es_validate_vmgexit(struct vcpu_svm *svm, u64 *exit_code)
 	case SVM_VMGEXIT_GUEST_REQUEST:
 	case SVM_VMGEXIT_EXT_GUEST_REQUEST:
 	case SVM_VMGEXIT_RUN_VMPL:
-	// Harsh: cases added for VEIL
-	case SVM_VMGEXIT_RUN_ENCLAVE:
-	case SVM_VMGEXIT_DUMP_VMCB:
-	// Adil: case added for Hello world
-	case SVM_VMGEXIT_HELLO_WORLD:
-		break;
-	// Vikram: cases added for 002 SC Attack
-	case SVM_VMGEXIT_INIT_SCATTACK:
-		break;
-	case SVM_VMGEXIT_FINI_SCATTACK:
 		break;
 	default:
 		goto vmgexit_err;
@@ -3451,9 +3428,6 @@ static int __sev_snp_update_protected_guest_state(struct kvm_vcpu *vcpu)
 	kvm_pfn_t pfn;
 	hpa_t cur_pa, *pa;
 
-	printk("[HARSH] In __sev_snp_update_protected_guest_state\n");
-
-
 	WARN_ON(!mutex_is_locked(&svm->snp_vmsa_mutex));
 
 	/* Mark the vCPU as offline and not runnable */
@@ -3505,10 +3479,8 @@ static int __sev_snp_update_protected_guest_state(struct kvm_vcpu *vcpu)
 
 		/* Save the GHCB GPA of the current VMPL */
 		svm->ghcb_gpa[svm->snp_current_vmpl] = svm->vmcb->control.ghcb_gpa;
-		printk("[HARSH] pa of old GHCB: %llx\n", svm->vmcb->control.ghcb_gpa);
 
 		/* Set the GHCB_GPA for the target VMPL and make it the current VMPL */
-		printk("[HARSH] pa of new GHCB: %llx\n", svm->ghcb_gpa[svm->snp_target_vmpl]);
 		svm->vmcb->control.ghcb_gpa = svm->ghcb_gpa[svm->snp_target_vmpl];
 
 		svm->snp_current_vmpl = svm->snp_target_vmpl;
@@ -3528,7 +3500,7 @@ bool sev_snp_init_protected_guest_state(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	bool init = false;
 	int ret;
-	
+
 	if (!sev_snp_guest(vcpu->kvm))
 		return false;
 
@@ -3539,7 +3511,6 @@ bool sev_snp_init_protected_guest_state(struct kvm_vcpu *vcpu)
 
 	init = true;
 
-	printk("[HARSH] Setting ap_create to false\n");
 	svm->snp_vmsa[svm->snp_target_vmpl].ap_create = false;
 
 	ret = __sev_snp_update_protected_guest_state(vcpu);
@@ -3563,18 +3534,12 @@ static int sev_snp_ap_creation(struct vcpu_svm *svm)
 	unsigned int vmpl;
 	bool kick;
 	int ret;
-	
-	//printk("[HARSH] Dumping VMCB before taking AP create request\n");
-
-	//veil_dump_vmcb(vcpu);
 
 	request = lower_32_bits(svm->vmcb->control.exit_info_1);
 	apic_id = upper_32_bits(svm->vmcb->control.exit_info_1);
-	
+
 	vmpl = (request & SVM_VMGEXIT_AP_VMPL_MASK) >> SVM_VMGEXIT_AP_VMPL_SHIFT;
 	request &= ~SVM_VMGEXIT_AP_VMPL_MASK;
-
-	printk("[HARSH] apic: %d, vmpl: %d, request: %d\n", apic_id, vmpl, request);
 
 	/* Validate the requested VMPL level */
 	if (vmpl >= SVM_SEV_VMPL_MAX) {
@@ -3593,7 +3558,7 @@ static int sev_snp_ap_creation(struct vcpu_svm *svm)
 	}
 
 	ret = 0;
-	printk("[HARSH] After fetching call args\n");
+
 	target_svm = to_svm(target_vcpu);
 
 	/*
@@ -3615,7 +3580,6 @@ static int sev_snp_ap_creation(struct vcpu_svm *svm)
 		ret = -EINVAL;
 		goto out;
 	}
-	printk("[HARSH] Starting AP Creation validation\n");
 
 	/* Perform common AP creation validation */
 	if (request < SVM_VMGEXIT_AP_DESTROY) {
@@ -3649,15 +3613,12 @@ static int sev_snp_ap_creation(struct vcpu_svm *svm)
 		}
 	}
 
-	printk("[HARSH] Before request switch case\n");
 	switch (request) {
 	case SVM_VMGEXIT_AP_CREATE_ON_INIT:
-		printk("[HARSH] In SVM_VMGEXIT_AP_CREATE_ON_INIT\n");
 		/* Delay switching to the new VMSA */
 		kick = false;
 		fallthrough;
 	case SVM_VMGEXIT_AP_CREATE:
-		printk("[HARSH] In SVM_VMGEXIT_AP_CREATE\n");
 		/* Switch to new VMSA on the next VMRUN */
 		target_svm->snp_target_vmpl = vmpl;
 		target_svm->snp_vmsa[vmpl].gpa = svm->vmcb->control.exit_info_2 & PAGE_MASK;
@@ -3675,16 +3636,13 @@ out:
 	mutex_unlock(&target_svm->snp_vmsa_mutex);
 
 	if (kick) {
-		printk("[HARSH] Inside kick if case\n");
-
 		if (target_vcpu->arch.mp_state == KVM_MP_STATE_UNINITIALIZED)
 			target_vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
 
 		kvm_make_request(KVM_REQ_UPDATE_PROTECTED_GUEST_STATE, target_vcpu);
 		kvm_vcpu_kick(target_vcpu);
 	}
-	
-	printk("[HARSH] Before ret\n\n\n");
+
 	return ret;
 }
 
@@ -3804,7 +3762,7 @@ static void sev_run_vmpl_vmsa(struct vcpu_svm *svm)
 		goto err;
 
 	vmpl = lower_32_bits(svm->vmcb->control.exit_info_1);
-	//printk("[HARSH] vmpl for sev_run_vmpl_vmsa: %d\n", vmpl);
+
 	ret = __sev_run_vmpl_vmsa(svm, vmpl);
 	if (ret)
 		goto err;
@@ -3822,7 +3780,6 @@ static int sev_handle_vmgexit_msr_protocol(struct vcpu_svm *svm)
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 	u64 ghcb_info;
 	int ret = 1;
-	int i;
 
 	ghcb_info = control->ghcb_gpa & GHCB_MSR_INFO_MASK;
 
@@ -3909,58 +3866,14 @@ static int sev_handle_vmgexit_msr_protocol(struct vcpu_svm *svm)
 		gfn = get_ghcb_msr_bits(svm, GHCB_MSR_GPA_VALUE_MASK,
 					GHCB_MSR_GPA_VALUE_POS);
 
-		// HARSH - updated to get multiple registered GHCBs per VMPL
-		for(i=0; i<MAX_ENCLAVE; ++i){
-			if (svm->ghcb_registered_gpa[svm->snp_current_vmpl][i] == 0)
-				break;
-		}
-		if(i>=MAX_ENCLAVE){
-			i=0;
-			printk("[HARSH] Reached max registered GHCBs, overwriting GHCB index 0\n");
-		}
-			
-		svm->ghcb_registered_gpa[svm->snp_current_vmpl][i] = gfn_to_gpa(gfn);
-		printk("[HARSH] Registered GHCB %llx for VMPL%d\n", gfn_to_gpa(gfn), svm->snp_current_vmpl);
-		
-		/* HARSH - Removing this later as GHCB should be registered on enclave creation 
-		if(svm->snp_current_vmpl==3){
-			printk("[HARSH] Registered for VMPL3, now for VMPL2\n");
-			svm->ghcb_registered_gpa[2] = gfn_to_gpa(gfn);	
-		}
-		*/
+		svm->ghcb_registered_gpa[svm->snp_current_vmpl] = gfn_to_gpa(gfn);
+
 		set_ghcb_msr_bits(svm, gfn, GHCB_MSR_GPA_VALUE_MASK,
 				  GHCB_MSR_GPA_VALUE_POS);
 		set_ghcb_msr_bits(svm, GHCB_MSR_REG_GPA_RESP, GHCB_MSR_INFO_MASK,
 				  GHCB_MSR_INFO_POS);
 		break;
 	}
-	/* HARSH - added this case, make it such that vmpl can be specified later */
-	case GHCB_MSR_REG_GPA_VMPL_REQ: {
-		u64 gfn;
-
-		gfn = get_ghcb_msr_bits(svm, GHCB_MSR_GPA_VALUE_MASK,
-					GHCB_MSR_GPA_VALUE_POS);
-
-		// HARSH - updated to get multiple registered GHCBs per VMPL
-		for(i=0; i<MAX_ENCLAVE; ++i){
-			if (svm->ghcb_registered_gpa[svm->snp_current_vmpl][i] == 0)
-				break;
-		}
-		if(i>=MAX_ENCLAVE){
-			i=0;
-			printk("[HARSH] Reached max registered GHCBs, overwriting GHCB index 0\n");
-		}
-
-		svm->ghcb_registered_gpa[2][i] = gfn_to_gpa(gfn);
-		printk("[HARSH] Registered GHCB %llx for VMPL%d\n", gfn_to_gpa(gfn), 2);
-				
-		set_ghcb_msr_bits(svm, gfn, GHCB_MSR_GPA_VALUE_MASK,
-				  GHCB_MSR_GPA_VALUE_POS);
-		set_ghcb_msr_bits(svm, GHCB_MSR_REG_GPA_RESP, GHCB_MSR_INFO_MASK,
-				  GHCB_MSR_INFO_POS);
-		break;
-	}
-	
 	case GHCB_MSR_PSC_REQ: {
 		gfn_t gfn;
 		int ret;
@@ -4024,7 +3937,6 @@ static int sev_handle_vmgexit_msr_protocol(struct vcpu_svm *svm)
 	return ret;
 }
 
-// Adil: This is where each VMGEXIT will actually be handled after validation
 int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -4139,7 +4051,6 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 		break;
 	}
 	case SVM_VMGEXIT_AP_CREATION:
-		//veil_dump_vmcb(vcpu);
 		ret = sev_snp_ap_creation(svm);
 		if (ret) {
 			svm_set_ghcb_sw_exit_info_1(vcpu, 1);
@@ -4157,40 +4068,14 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 		ret = 1;
 		break;
 	case SVM_VMGEXIT_RUN_VMPL:
-		//veil_dump_vmcb(vcpu);
 		sev_run_vmpl_vmsa(svm);
-		ret = 1;
-		break;
-	// HARSH
-	case SVM_VMGEXIT_RUN_ENCLAVE:
-		//veil_dump_vmcb_custom_vmsa(vcpu);
-		sev_run_vmpl_vmsa(svm);
-		veil_dump_vmcb(vcpu);
 
 		ret = 1;
-		break;
-	// ADIL
-	//Vikram note: This code is a demonstration
-	case SVM_VMGEXIT_HELLO_WORLD:
-		printk("Hello World from the new git directory.\n");
-		ret = 0;
-		break;
-	//Vikram: Handler code for SC Attack 002
-	case SVM_VMGEXIT_INIT_SCATTACK:
-		printk("Here is the address I received: %llu\n", control->exit_info_1);
-		ret = 1;
-		break;
-	case SVM_VMGEXIT_FINI_SCATTACK:
-		printk("I finished!");
 		break;
 	case SVM_VMGEXIT_UNSUPPORTED_EVENT:
 		vcpu_unimpl(vcpu,
 			    "vmgexit: unsupported event - exit_info_1=%#llx, exit_info_2=%#llx\n",
 			    control->exit_info_1, control->exit_info_2);
-		break;
-	case SVM_VMGEXIT_DUMP_VMCB:
-		veil_dump_vmcb(vcpu);
-		ret = 1;
 		break;
 	default:
 		ret = svm_invoke_exit_handler(vcpu, exit_code);
@@ -4233,7 +4118,7 @@ void sev_es_init_vmcb(struct vcpu_svm *svm)
 
 	/* Track EFER/CR register changes */
 	svm_set_intercept(svm, TRAP_EFER_WRITE);
-#if 1
+#if (0)
 	svm_set_intercept(svm, TRAP_CR0_WRITE);
 #endif
 	svm_set_intercept(svm, TRAP_CR4_WRITE);
@@ -4252,11 +4137,6 @@ void sev_es_init_vmcb(struct vcpu_svm *svm)
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTBRANCHTOIP, 1, 1);
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTINTFROMIP, 1, 1);
 	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_LASTINTTOIP, 1, 1);
-
-#if 0
-	printk("[CHUQI] sev_es_init_vmcb. INTERCEPT_CR0 read=%d write=%d\n",
-			 svm_is_intercept(svm, INTERCEPT_CR0_READ),  svm_is_intercept(svm, INTERCEPT_CR0_WRITE));
-#endif
 }
 
 void sev_es_create_vcpu(struct vcpu_svm *svm)
