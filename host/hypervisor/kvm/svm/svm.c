@@ -2525,7 +2525,7 @@ static int cr_interception(struct kvm_vcpu *vcpu)
 	if (unlikely((svm->vmcb->control.exit_info_1 & CR_VALID) == 0))
 		return emulate_on_interception(vcpu);
 
-	printk("CHUQI: cr_interception  exit code: 0x%x\n", svm->vmcb->control.exit_code);
+	// printk("CHUQI: cr_interception  exit code: 0x%x\n", svm->vmcb->control.exit_code);
 
 	reg = svm->vmcb->control.exit_info_1 & SVM_EXITINFO_REG_MASK;
 	if (svm->vmcb->control.exit_code == SVM_EXIT_CR0_SEL_WRITE)

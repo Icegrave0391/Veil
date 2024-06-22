@@ -4233,7 +4233,7 @@ void sev_es_init_vmcb(struct vcpu_svm *svm)
 
 	/* Track EFER/CR register changes */
 	svm_set_intercept(svm, TRAP_EFER_WRITE);
-#if 1
+#if 0
 	svm_set_intercept(svm, TRAP_CR0_WRITE);
 #endif
 	svm_set_intercept(svm, TRAP_CR4_WRITE);
